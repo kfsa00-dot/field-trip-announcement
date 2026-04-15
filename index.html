@@ -1,0 +1,30 @@
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheets()[0];
+  const rows = sheet.getDataRange().getValues();
+  const tz = ss.getSpreadsheetTimeZone(); // 直接用試算表自己的時區
+
+  function fmtTime(v) {
+    if (v instanceof Date) {
+      return Utilities.formatDate(v, tz, "HH:mm");
+    }
+    const s = String(v).trim();
+    if (!s) return "";
+    const match = s.match(/^(\d{1,2}):(\d{2})/);
+    if (match) return ("0" + match[1]).slice(-2) + ":" + match[2];
+    return s;
+  }
+
+  const data = rows.slice(1).map(row => ({
+    date:    row[0] ? String(row[0]).trim() : "",
+    weekday: row[1] ? String(row[1]).trim() : "",
+    cls:     row[2] ? String(row[2]).trim().replace(/\.0$/, "") : "",
+    depart:  row[3] ? fmtTime(row[3]) : "",
+    arrive:  row[4] ? fmtTime(row[4]) : "",
+    dest:    row[5] ? String(row[5]).trim() : "",
+  })).filter(r => r.date && r.cls && r.dest);
+
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
