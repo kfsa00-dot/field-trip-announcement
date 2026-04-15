@@ -246,7 +246,7 @@
     const d = parseInt(parts[2]);
     if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
     // 民國年若小於 1912，視為 ROC 紀年，轉換為西元
-    const adYear = y < 1912 ? y + 1911 9 y;
+    const adYear = y < 1912 ? y + 1911 : y;
     return new Date(adYear, m - 1, d);
   }
 
