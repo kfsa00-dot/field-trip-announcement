@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>校外教學班級公告</title>
+  <title>光復國小學務處 ─ 校外教學資訊</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -16,27 +16,29 @@
 
     /* 頁首 */
     header {
-      background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
-      color: white;
+      background: linear-gradient(135deg, #fde68a 0%, #f59e0b 55%, #d97706 100%);
+      color: #78350f;
       padding: 28px 24px 24px;
       text-align: center;
-      box-shadow: 0 4px 12px rgba(13,71,161,0.25);
+      box-shadow: 0 4px 16px rgba(217,119,6,0.35);
     }
     header .school-label {
-      font-size: 13px;
-      letter-spacing: 3px;
-      opacity: 0.82;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      opacity: 0.85;
       margin-bottom: 6px;
     }
     header h1 {
-      font-size: clamp(20px, 4vw, 28px);
-      font-weight: 700;
-      letter-spacing: 2px;
+      font-size: clamp(22px, 4.5vw, 32px);
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: #431407;
     }
     header .subtitle {
       margin-top: 6px;
       font-size: 13px;
-      opacity: 0.72;
+      opacity: 0.65;
     }
 
     /* 主體 */
@@ -61,8 +63,8 @@
       transition: border-color .2s, box-shadow .2s;
     }
     .search-bar input:focus {
-      border-color: #1a73e8;
-      box-shadow: 0 0 0 3px rgba(26,115,232,.15);
+      border-color: #d97706;
+      box-shadow: 0 0 0 3px rgba(217,119,6,.15);
     }
 
     /* 表格卡片 */
@@ -88,7 +90,7 @@
       color: #4a5568;
     }
     .count-badge {
-      background: #1a73e8;
+      background: #d97706;
       color: white;
       border-radius: 20px;
       padding: 3px 12px;
@@ -104,7 +106,7 @@
       font-size: 14px;
     }
     thead tr {
-      background: #1a73e8;
+      background: linear-gradient(90deg, #f59e0b, #d97706);
       color: white;
     }
     thead th {
@@ -119,7 +121,7 @@
       transition: background .12s;
     }
     tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: #ebf4ff; }
+    tbody tr:hover { background: #fffbeb; }
     tbody td {
       padding: 11px 14px;
       text-align: center;
@@ -132,8 +134,8 @@
     }
     .cls-badge {
       display: inline-block;
-      background: #e8f0fe;
-      color: #1557b0;
+      background: #fef3c7;
+      color: #92400e;
       border-radius: 6px;
       padding: 2px 9px;
       font-weight: 700;
@@ -155,7 +157,7 @@
     .spinner {
       width: 36px; height: 36px;
       border: 4px solid #e2e8f0;
-      border-top-color: #1a73e8;
+      border-top-color: #d97706;
       border-radius: 50%;
       animation: spin .75s linear infinite;
       margin: 0 auto 14px;
@@ -182,8 +184,8 @@
 <body>
 
 <header>
-  <div class="school-label">學校公告系統</div>
-  <h1>🚌 校外教學班級公告</h1>
+  <div class="school-label">光復國小學務處公告</div>
+  <h1>🚌 校外教學資訊</h1>
   <div class="subtitle">Field Trip Schedule Announcement</div>
 </header>
 
@@ -220,7 +222,7 @@
   </div>
 
   <footer>
-    <p>資料來源：Google 試算表 ｜ 如有疑問諆洽教務處</p>
+    <p>資料來源：Google 試算表 ｜ 如有疑問請洽教務處</p>
     <p style="margin-top:5px;">
       <a href="https://github.com/kfsa00-dot/field-trip-announcement" target="_blank">GitHub 儲存庫</a>
     </p>
@@ -233,6 +235,27 @@
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxlhAMOKuUZVQlF2jsiHIezMoKQsSMsVpCBLgRME7mM_Y3_F_Sci5OzbGSViCFPxwzP/exec";
 
   let allRows = [];
+
+  // 解析民國年日期字串（格式：115.03.06 或 115/03/06）→ JS Date
+  function parseRocDate(str) {
+    if (!str) return null;
+    const parts = String(str).trim().split(/[.\-\/]/);
+    if (parts.length < 3) return null;
+    const y = parseInt(parts[0]);
+    const m = parseInt(parts[1]);
+    const d = parseInt(parts[2]);
+    if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+    // 民國年若小於 1912，視為 ROC 紀年，轉換為西元
+    const adYear = y < 1912 ? y + 1911 9 y;
+    return new Date(adYear, m - 1, d);
+  }
+
+  // 取今天零時（不含時分秒，方便比較「當天」）
+  function todayMidnight() {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }
 
   async function loadData() {
     const statusBox = document.getElementById("statusBox");
@@ -248,8 +271,15 @@
         return;
       }
 
-      allRows = data;
-      renderTable(data);
+      // 過濾掉今天以前已結束的行程（只保留今天及未來）
+      const today = todayMidnight();
+      const upcoming = data.filter(r => {
+        const d = parseRocDate(r.date);
+        return d && d >= today;
+      });
+
+      allRows = upcoming;
+      renderTable(upcoming);
 
     } catch (err) {
       statusBox.innerHTML = `
