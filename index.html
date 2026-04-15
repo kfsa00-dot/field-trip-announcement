@@ -1,30 +1,308 @@
-function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheets()[0];
-  const rows = sheet.getDataRange().getValues();
-  const tz = ss.getSpreadsheetTimeZone(); // 直接用試算表自己的時區
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>校外教學班級公告</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  function fmtTime(v) {
-    if (v instanceof Date) {
-      return Utilities.formatDate(v, tz, "HH:mm");
+    body {
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      background: #f0f4f8;
+      color: #2d3748;
+      min-height: 100vh;
     }
-    const s = String(v).trim();
-    if (!s) return "";
-    const match = s.match(/^(\d{1,2}):(\d{2})/);
-    if (match) return ("0" + match[1]).slice(-2) + ":" + match[2];
-    return s;
+
+    /* 頁首 */
+    header {
+      background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+      color: white;
+      padding: 28px 24px 24px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(13,71,161,0.25);
+    }
+    header .school-label {
+      font-size: 13px;
+      letter-spacing: 3px;
+      opacity: 0.82;
+      margin-bottom: 6px;
+    }
+    header h1 {
+      font-size: clamp(20px, 4vw, 28px);
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    header .subtitle {
+      margin-top: 6px;
+      font-size: 13px;
+      opacity: 0.72;
+    }
+
+    /* 主體 */
+    main {
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 0 16px 56px;
+    }
+
+    /* 搜尋列 */
+    .search-bar {
+      margin-bottom: 20px;
+    }
+    .search-bar input {
+      width: 100%;
+      padding: 11px 16px;
+      border: 1px solid #cbd5e0;
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+      background: white;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .search-bar input:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 3px rgba(26,115,232,.15);
+    }
+
+    /* 表格卡片 */
+    .table-card {
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px;
+      background: #f7faff;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .card-header h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #4a5568;
+    }
+    .count-badge {
+      background: #1a73e8;
+      color: white;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* 表格 */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    thead tr {
+      background: #1a73e8;
+      color: white;
+    }
+    thead th {
+      padding: 12px 14px;
+      font-weight: 600;
+      text-align: center;
+      white-space: nowrap;
+      letter-spacing: 0.5px;
+    }
+    tbody tr {
+      border-bottom: 1px solid #edf2f7;
+      transition: background .12s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #ebf4ff; }
+    tbody td {
+      padding: 11px 14px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    tbody td.dest-cell {
+      text-align: left;
+      white-space: normal;
+      max-width: 220px;
+    }
+    .cls-badge {
+      display: inline-block;
+      background: #e8f0fe;
+      color: #1557b0;
+      border-radius: 6px;
+      padding: 2px 9px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .time-cell {
+      color: #276749;
+      font-weight: 500;
+    }
+
+    /* 狀態區塊 */
+    .status-box {
+      text-align: center;
+      padding: 52px 24px;
+      color: #718096;
+    }
+    .status-box .icon { font-size: 40px; margin-bottom: 12px; }
+    .status-box p { font-size: 14px; line-height: 1.8; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 4px solid #e2e8f0;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 頁尾 */
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: #a0aec0;
+      margin-top: 16px;
+    }
+    footer a { color: #90cdf4; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* RWD */
+    @media (max-width: 540px) {
+      thead th, tbody td { padding: 9px 8px; font-size: 13px; }
+      header h1 { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="school-label">學校公告系統</div>
+  <h1>🚌 校外教學班級公告</h1>
+  <div class="subtitle">Field Trip Schedule Announcement</div>
+</header>
+
+<main>
+
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="🔍 搜尋班級、日期或目的地…" oninput="filterTable()" />
+  </div>
+
+  <div class="table-card">
+    <div class="card-header">
+      <h2>📋 出遊行程一覽</h2>
+      <span class="count-badge" id="countBadge">載入中…</span>
+    </div>
+    <div class="table-wrap">
+      <div class="status-box" id="statusBox">
+        <div class="spinner"></div>
+        <p>正在讀取資料，請稍候…</p>
+      </div>
+      <table id="tripTable" style="display:none;">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>星期</th>
+            <th>班級</th>
+            <th>出發時間</th>
+            <th>返校時間</th>
+            <th>目的地</th>
+          </tr>
+        </thead>
+        <tbody id="tripBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <p>資料來源：Google 試算表 ｜ 如有疑問諆洽教務處</p>
+    <p style="margin-top:5px;">
+      <a href="https://github.com/kfsa00-dot/field-trip-announcement" target="_blank">GitHub 儲存庫</a>
+    </p>
+  </footer>
+
+</main>
+
+<script>
+  // ===== 資料來源（Google Apps Script 部署網址）=====
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxlhAMOKuUZVQlF2jsiHIezMoKQsSMsVpCBLgRME7mM_Y3_F_Sci5OzbGSViCFPxwzP/exec";
+
+  let allRows = [];
+
+  async function loadData() {
+    const statusBox = document.getElementById("statusBox");
+
+    try {
+      const res = await fetch(GAS_URL);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        statusBox.innerHTML = `<div class="icon">📭</div><p>目前沒有校外教學行程資料。</p>`;
+        document.getElementById("countBadge").textContent = "0 筆";
+        return;
+      }
+
+      allRows = data;
+      renderTable(data);
+
+    } catch (err) {
+      statusBox.innerHTML = `
+        <div class="icon">❌</div>
+        <p>資料讀取失敗：${err.message}<br>
+           請確認 Apps Script 已部署，且存取權限設為「任何人」。</p>`;
+      document.getElementById("countBadge").textContent = "錯誤";
+    }
   }
 
-  const data = rows.slice(1).map(row => ({
-    date:    row[0] ? String(row[0]).trim() : "",
-    weekday: row[1] ? String(row[1]).trim() : "",
-    cls:     row[2] ? String(row[2]).trim().replace(/\.0$/, "") : "",
-    depart:  row[3] ? fmtTime(row[3]) : "",
-    arrive:  row[4] ? fmtTime(row[4]) : "",
-    dest:    row[5] ? String(row[5]).trim() : "",
-  })).filter(r => r.date && r.cls && r.dest);
+  function renderTable(rows) {
+    const tbody  = document.getElementById("tripBody");
+    const table  = document.getElementById("tripTable");
+    const status = document.getElementById("statusBox");
 
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+    if (rows.length === 0) {
+      table.style.display = "none";
+      status.style.display = "block";
+      status.innerHTML = `<div class="icon">🔍</div><p>找不到符合條件的資料。</p>`;
+      document.getElementById("countBadge").textContent = "0 筆";
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.date    || "—"}</td>
+        <td>${r.weekday ? "（" + r.weekday + "）" : "—"}</td>
+        <td><span class="cls-badge">${r.cls || "—"}</span></td>
+        <td class="time-cell">${r.depart || "—"}</td>
+        <td class="time-cell">${r.arrive || "—"}</td>
+        <td class="dest-cell">${r.dest   || "—"}</td>
+      </tr>
+    `).join("");
+
+    status.style.display = "none";
+    table.style.display  = "table";
+    document.getElementById("countBadge").textContent = rows.length + " 筆";
+  }
+
+  function filterTable() {
+    const q = document.getElementById("searchInput").value.trim().toLowerCase();
+    if (!q) { renderTable(allRows); return; }
+    const filtered = allRows.filter(r =>
+      (r.date    || "").toLowerCase().includes(q) ||
+      (r.weekday || "").toLowerCase().includes(q) ||
+      (r.cls     || "").toLowerCase().includes(q) ||
+      (r.dest    || "").toLowerCase().includes(q)
+    );
+    renderTable(filtered);
+  }
+
+  loadData();
+</script>
+
+</body>
+</html>
